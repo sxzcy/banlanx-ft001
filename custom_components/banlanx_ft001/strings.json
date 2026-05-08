@@ -1,0 +1,40 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BanlanX FT001",
+        "description": "通过本地 WiFi 连接 FT001 控制器。",
+        "data": {
+          "host": "主机 / IP",
+          "port": "端口",
+          "name": "名称"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接到控制器。",
+      "invalid_model": "控制器没有返回已验证的 FT001 双通道 RGB 布局。"
+    },
+    "abort": {
+      "already_configured": "这个控制器已经配置过。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BanlanX FT001 设置",
+        "description": "更新本地 WiFi 连接和轮询设置。",
+        "data": {
+          "host": "主机 / IP",
+          "port": "端口",
+          "name": "名称",
+          "scan_interval": "轮询间隔（秒）"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接到控制器。",
+      "invalid_model": "控制器没有返回已验证的 FT001 双通道 RGB 布局。"
+    }
+  }
+}

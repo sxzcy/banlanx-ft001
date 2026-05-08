@@ -1,0 +1,41 @@
+{
+  "title": "BanlanX FT001",
+  "config": {
+    "step": {
+      "user": {
+        "title": "BanlanX FT001",
+        "description": "Connect to the FT001 controller over local WiFi.",
+        "data": {
+          "host": "Host / IP",
+          "port": "Port",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the controller.",
+      "invalid_model": "The controller did not return the verified FT001 two-channel RGB layout."
+    },
+    "abort": {
+      "already_configured": "This controller is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BanlanX FT001 settings",
+        "description": "Update local WiFi connection and polling settings.",
+        "data": {
+          "host": "Host / IP",
+          "port": "Port",
+          "name": "Name",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the controller.",
+      "invalid_model": "The controller did not return the verified FT001 two-channel RGB layout."
+    }
+  }
+}
