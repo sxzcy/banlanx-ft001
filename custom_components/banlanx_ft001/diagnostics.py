@@ -4,21 +4,30 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_LOCAL_NAME, CONF_MAC_ADDRESS, CONF_MODEL_CODE, DOMAIN
+from .const import CONF_LOCAL_NAME, CONF_MAC_ADDRESS, CONF_MODEL_CODE
 from .coordinator import BanlanxFT001Coordinator
+
+TO_REDACT = {
+    "client_host",
+    "host",
+    "ip_address",
+    "local_name",
+    "mac_address",
+    "ssid",
+    "unique_id",
+}
 
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for one FT001 config entry."""
-    coordinator: BanlanxFT001Coordinator | None = hass.data.get(DOMAIN, {}).get(
-        entry.entry_id
-    )
+    coordinator: BanlanxFT001Coordinator | None = getattr(entry, "runtime_data", None)
     diagnostics: dict[str, Any] = {
         "entry": {
             "title": entry.title,
@@ -37,7 +46,7 @@ async def async_get_config_entry_diagnostics(
     }
 
     if coordinator is None or coordinator.data is None:
-        return diagnostics
+        return async_redact_data(diagnostics, TO_REDACT)
 
     status = coordinator.data
     diagnostics["status"] = {
@@ -58,4 +67,4 @@ async def async_get_config_entry_diagnostics(
             for channel, state in status.channels.items()
         },
     }
-    return diagnostics
+    return async_redact_data(diagnostics, TO_REDACT)

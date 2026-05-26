@@ -1,6 +1,6 @@
 {
   "domain": "banlanx_ft001",
-  "name": "BanlanX FT001",
+  "name": "BanlanX Aquarium Light",
   "codeowners": ["@sxzcy"],
   "config_flow": true,
   "dependencies": ["network"],

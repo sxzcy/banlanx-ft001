@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 import voluptuous as vol
@@ -23,7 +24,20 @@ from .const import (
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
-from .discovery import async_discover_ft001_host
+from .discovery import FT001Discovery, async_discover_ft001_host
+
+MIN_PORT = 1
+MAX_PORT = 65535
+
+
+def _strip_string(value: str) -> str:
+    """Return a stripped string value."""
+    return value.strip()
+
+
+HOST_SCHEMA = vol.All(str, _strip_string, vol.Length(min=1))
+PORT_SCHEMA = vol.All(vol.Coerce(int), vol.Range(min=MIN_PORT, max=MAX_PORT))
+NAME_SCHEMA = vol.All(str, _strip_string)
 
 
 class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -58,13 +72,13 @@ class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not _looks_like_ft001(status.channels):
                     errors["base"] = "invalid_model"
                 else:
-                    discovery = await async_discover_ft001_host(host, timeout=3.0)
+                    discovery = await _async_get_verified_discovery(host)
                     self._abort_if_host_configured(
                         host, port, discovery.mac_address if discovery else None
                     )
                     unique_id = (
                         discovery.mac_address
-                        if discovery is not None and discovery.is_ft001
+                        if discovery is not None
                         else f"{host}:{port}"
                     )
                     await self.async_set_unique_id(unique_id)
@@ -76,14 +90,7 @@ class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PORT: port,
                         CONF_NAME: name,
                     }
-                    if discovery is not None:
-                        data.update(
-                            {
-                                CONF_MAC_ADDRESS: discovery.mac_address,
-                                CONF_LOCAL_NAME: discovery.local_name,
-                                CONF_MODEL_CODE: discovery.model_code,
-                            }
-                        )
+                    data.update(_discovery_data(discovery))
                     return self.async_create_entry(
                         title=name,
                         data=data,
@@ -96,9 +103,9 @@ class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST): str,
-                    vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-                    vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
+                    vol.Required(CONF_HOST): HOST_SCHEMA,
+                    vol.Required(CONF_PORT, default=DEFAULT_PORT): PORT_SCHEMA,
+                    vol.Optional(CONF_NAME, default=DEFAULT_NAME): NAME_SCHEMA,
                 }
             ),
             errors=errors,
@@ -108,14 +115,10 @@ class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, host: str, port: int, mac_address: str | None
     ) -> None:
         """Abort when this controller already exists under old or new metadata."""
-        for entry in self._async_current_entries():
-            if (
-                entry.data.get(CONF_HOST) == host
-                and entry.data.get(CONF_PORT, DEFAULT_PORT) == port
-            ):
-                raise AbortFlow("already_configured")
-            if mac_address and entry.data.get(CONF_MAC_ADDRESS) == mac_address:
-                raise AbortFlow("already_configured")
+        if _is_controller_configured(
+            self._async_current_entries(), host, port, mac_address
+        ):
+            raise AbortFlow("already_configured")
 
 
 class BanlanxFT001OptionsFlow(config_entries.OptionsFlowWithConfigEntry):
@@ -144,34 +147,43 @@ class BanlanxFT001OptionsFlow(config_entries.OptionsFlowWithConfigEntry):
                 if not _looks_like_ft001(status.channels):
                     errors["base"] = "invalid_model"
                 else:
-                    discovery = await async_discover_ft001_host(host, timeout=3.0)
-                    new_data = dict(data)
-                    new_data.update(
-                        {
-                            CONF_HOST: host,
-                            CONF_PORT: port,
-                            CONF_NAME: name,
-                        }
-                    )
-                    if discovery is not None:
+                    discovery = await _async_get_verified_discovery(host)
+                    current_mac = data.get(CONF_MAC_ADDRESS)
+                    if (
+                        current_mac
+                        and discovery is not None
+                        and discovery.mac_address.upper() != current_mac.upper()
+                    ):
+                        errors["base"] = "different_device"
+                    elif _is_controller_configured(
+                        self.hass.config_entries.async_entries(DOMAIN),
+                        host,
+                        port,
+                        discovery.mac_address if discovery else current_mac,
+                        ignore_entry_id=self.config_entry.entry_id,
+                    ):
+                        errors["base"] = "already_configured"
+                    else:
+                        new_data = dict(data)
                         new_data.update(
                             {
-                                CONF_MAC_ADDRESS: discovery.mac_address,
-                                CONF_LOCAL_NAME: discovery.local_name,
-                                CONF_MODEL_CODE: discovery.model_code,
+                                CONF_HOST: host,
+                                CONF_PORT: port,
+                                CONF_NAME: name,
                             }
                         )
-                    self.hass.config_entries.async_update_entry(
-                        self.config_entry,
-                        title=name,
-                        data=new_data,
-                    )
-                    return self.async_create_entry(
-                        title="",
-                        data={
-                            CONF_SCAN_INTERVAL: scan_interval,
-                        },
-                    )
+                        new_data.update(_discovery_data(discovery))
+                        self.hass.config_entries.async_update_entry(
+                            self.config_entry,
+                            title=name,
+                            data=new_data,
+                        )
+                        return self.async_create_entry(
+                            title="",
+                            data={
+                                CONF_SCAN_INTERVAL: scan_interval,
+                            },
+                        )
 
         return self.async_show_form(
             step_id="init",
@@ -179,13 +191,13 @@ class BanlanxFT001OptionsFlow(config_entries.OptionsFlowWithConfigEntry):
                 {
                     vol.Required(
                         CONF_HOST, default=data.get(CONF_HOST, "")
-                    ): str,
+                    ): HOST_SCHEMA,
                     vol.Required(
                         CONF_PORT, default=data.get(CONF_PORT, DEFAULT_PORT)
-                    ): int,
+                    ): PORT_SCHEMA,
                     vol.Optional(
                         CONF_NAME, default=data.get(CONF_NAME, DEFAULT_NAME)
-                    ): str,
+                    ): NAME_SCHEMA,
                     vol.Required(
                         CONF_SCAN_INTERVAL,
                         default=options.get(
@@ -209,3 +221,47 @@ def _looks_like_ft001(channels: dict) -> bool:
         and channels[1].light_type == 5
         and channels[2].light_type == 5
     )
+
+
+async def _async_get_verified_discovery(host: str) -> FT001Discovery | None:
+    """Return discovery metadata only when it matches FT001."""
+    discovery = await async_discover_ft001_host(host, timeout=3.0)
+    if discovery is None or not discovery.is_ft001:
+        return None
+    return discovery
+
+
+def _discovery_data(discovery: FT001Discovery | None) -> dict[str, str | int | None]:
+    """Return config entry fields for a verified discovery result."""
+    if discovery is None:
+        return {}
+    return {
+        CONF_MAC_ADDRESS: discovery.mac_address,
+        CONF_LOCAL_NAME: discovery.local_name,
+        CONF_MODEL_CODE: discovery.model_code,
+    }
+
+
+def _is_controller_configured(
+    entries: Iterable[config_entries.ConfigEntry],
+    host: str,
+    port: int,
+    mac_address: str | None,
+    *,
+    ignore_entry_id: str | None = None,
+) -> bool:
+    """Return true when another config entry already points at this controller."""
+    for entry in entries:
+        if ignore_entry_id is not None and entry.entry_id == ignore_entry_id:
+            continue
+        if (
+            entry.data.get(CONF_HOST) == host
+            and entry.data.get(CONF_PORT, DEFAULT_PORT) == port
+        ):
+            return True
+        if (
+            mac_address
+            and entry.data.get(CONF_MAC_ADDRESS, "").upper() == mac_address.upper()
+        ):
+            return True
+    return False

@@ -1,4 +1,4 @@
-# BanlanX FT001 for Home Assistant
+# BanlanX Aquarium Light for Home Assistant
 
 Local WiFi Home Assistant custom integration for the BanlanX/SPLED `FT001`
 fish tank light controller.
@@ -32,10 +32,10 @@ BLE or a vendor cloud service.
 
 1. In HACS, open **Integrations**.
 2. Add this repository as a custom repository with category **Integration**.
-3. Install **BanlanX FT001**.
+3. Install **BanlanX Aquarium Light**.
 4. Restart Home Assistant.
 5. Go to **Settings -> Devices & services -> Add integration** and search for
-   **BanlanX FT001**.
+   **BanlanX Aquarium Light**.
 
 ### Manual
 

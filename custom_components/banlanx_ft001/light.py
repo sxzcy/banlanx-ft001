@@ -13,25 +13,21 @@ from homeassistant.components.light import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import FT001ChannelState
+from .client import BanlanxFT001Error, FT001ChannelState
 from .const import (
-    CONF_LOCAL_NAME,
     CONF_MAC_ADDRESS,
     CONF_MODEL_CODE,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DOMAIN,
+    LIGHT_ICON,
 )
 from .coordinator import BanlanxFT001Coordinator
-
-CHANNEL_NAMES = {
-    1: "通道 1",
-    2: "通道 2",
-}
 
 
 async def async_setup_entry(
@@ -40,7 +36,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up FT001 light entities."""
-    coordinator: BanlanxFT001Coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: BanlanxFT001Coordinator = entry.runtime_data
     async_add_entities(
         [
             BanlanxFT001Light(coordinator, entry, 1),
@@ -52,6 +48,8 @@ async def async_setup_entry(
 class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity):
     """One FT001 RGB output channel."""
 
+    _attr_has_entity_name = True
+    _attr_icon = LIGHT_ICON
     _attr_supported_color_modes = {ColorMode.RGB}
     _attr_color_mode = ColorMode.RGB
 
@@ -67,8 +65,10 @@ class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity)
         host = entry.data[CONF_HOST]
         port = entry.data.get(CONF_PORT, DEFAULT_PORT)
         name = entry.data.get(CONF_NAME, DEFAULT_NAME)
-        device_id = entry.unique_id or entry.data.get(CONF_MAC_ADDRESS) or f"{host}:{port}"
-        self._attr_name = f"{name} {CHANNEL_NAMES[channel]}"
+        device_id = (
+            entry.unique_id or entry.data.get(CONF_MAC_ADDRESS) or f"{host}:{port}"
+        )
+        self._attr_translation_key = f"channel_{channel}"
         self._attr_unique_id = f"{device_id}:channel_{channel}"
         device_info = {
             "identifiers": {(DOMAIN, device_id)},
@@ -123,15 +123,10 @@ class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity)
             "effect": state.effect,
             "speed": state.speed,
             "length": state.length,
-            "firmware": self.coordinator.data.firmware,
-            "controller_ip": self.coordinator.data.ip_address,
-            "controller_ssid": self.coordinator.data.ssid,
         }
+        if firmware := self.coordinator.data.firmware:
+            attrs["firmware"] = firmware
         entry_data = self.coordinator.entry.data
-        if mac_address := entry_data.get(CONF_MAC_ADDRESS):
-            attrs["mac_address"] = mac_address
-        if local_name := entry_data.get(CONF_LOCAL_NAME):
-            attrs["local_name"] = local_name
         if model_code := entry_data.get(CONF_MODEL_CODE):
             attrs["model_code"] = model_code
         return attrs
@@ -142,22 +137,31 @@ class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity)
         rgb = kwargs.get(ATTR_RGB_COLOR)
         brightness = kwargs.get(ATTR_BRIGHTNESS)
 
-        if rgb is None and brightness is None:
-            await self.coordinator.client.async_set_power(self._channel, True)
-        else:
-            if state is not None and not state.power:
+        try:
+            if rgb is None and brightness is None:
                 await self.coordinator.client.async_set_power(self._channel, True)
-            await self.coordinator.client.async_set_static_color(
-                self._channel,
-                rgb or (state.rgb if state is not None else (255, 255, 255)),
-                brightness
-                if brightness is not None
-                else (state.brightness if state is not None else 255),
-            )
+            else:
+                await self.coordinator.client.async_set_static_color(
+                    self._channel,
+                    rgb or (state.rgb if state is not None else (255, 255, 255)),
+                    brightness
+                    if brightness is not None
+                    else (state.brightness if state is not None else 255),
+                    power_on=state is not None and not state.power,
+                )
+        except BanlanxFT001Error as ex:
+            raise HomeAssistantError(
+                f"Failed to update FT001 channel {self._channel}"
+            ) from ex
 
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off this channel."""
-        await self.coordinator.client.async_set_power(self._channel, False)
+        try:
+            await self.coordinator.client.async_set_power(self._channel, False)
+        except BanlanxFT001Error as ex:
+            raise HomeAssistantError(
+                f"Failed to turn off FT001 channel {self._channel}"
+            ) from ex
         await self.coordinator.async_request_refresh()

@@ -126,6 +126,8 @@ def _parse_spnet_response(
     name_length = payload[11]
     local_name = None
     if name_length:
+        if len(payload) < 12 + name_length:
+            return None
         raw_name = payload[12 : 12 + name_length]
         local_name = raw_name.decode("utf-8", errors="ignore").rstrip("\x00") or None
 

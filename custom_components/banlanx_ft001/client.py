@@ -61,10 +61,12 @@ class BanlanxFT001Client:
         self.host = host
         self.port = port
         self.timeout = timeout
+        self._lock = asyncio.Lock()
 
     async def async_get_status(self) -> FT001Status:
         """Fetch current device status."""
-        header, payload = await self._async_request(CMD_STATUS_QUERY)
+        async with self._lock:
+            header, payload = await self._async_request(CMD_STATUS_QUERY)
         if header[7] != CMD_STATUS_QUERY:
             raise BanlanxFT001ProtocolError("Unexpected status response command")
         return _parse_status_payload(payload)
@@ -72,16 +74,27 @@ class BanlanxFT001Client:
     async def async_set_power(self, channel: int, state: bool) -> None:
         """Set one output channel on or off."""
         _validate_channel(channel)
-        await self._async_send(CMD_POWER, bytes([channel, 0x01 if state else 0x00]))
+        async with self._lock:
+            await self._async_send(CMD_POWER, bytes([channel, 0x01 if state else 0x00]))
 
     async def async_set_static_color(
-        self, channel: int, rgb: tuple[int, int, int], brightness: int
+        self,
+        channel: int,
+        rgb: tuple[int, int, int],
+        brightness: int,
+        *,
+        power_on: bool = False,
     ) -> None:
         """Set one output channel to a static RGB color and brightness."""
         _validate_channel(channel)
         red, green, blue = (_validate_byte(value) for value in rgb)
         level = _validate_byte(brightness)
-        await self._async_send(CMD_STATIC_COLOR, bytes([channel, red, green, blue, level]))
+        async with self._lock:
+            if power_on:
+                await self._async_send(CMD_POWER, bytes([channel, 0x01]))
+            await self._async_send(
+                CMD_STATIC_COLOR, bytes([channel, red, green, blue, level])
+            )
 
     async def _async_send(self, command: int, payload: bytes = b"") -> None:
         """Send a command that does not return a payload."""
@@ -94,7 +107,9 @@ class BanlanxFT001Client:
             writer.close()
             await _async_wait_closed(writer)
 
-    async def _async_request(self, command: int, payload: bytes = b"") -> tuple[bytes, bytes]:
+    async def _async_request(
+        self, command: int, payload: bytes = b""
+    ) -> tuple[bytes, bytes]:
         """Send a command and read an SPTECH response."""
         reader, writer = await self._async_open_connection()
         try:
@@ -118,7 +133,7 @@ class BanlanxFT001Client:
                 asyncio.open_connection(self.host, self.port),
                 timeout=self.timeout,
             )
-        except OSError as ex:
+        except (OSError, ValueError) as ex:
             raise BanlanxFT001ConnectionError(str(ex)) from ex
         except TimeoutError as ex:
             raise BanlanxFT001ConnectionError("Connection timed out") from ex
@@ -126,7 +141,12 @@ class BanlanxFT001Client:
 
 def _build_packet(command: int, payload: bytes = b"") -> bytes:
     """Build a network SPTECH packet."""
-    return HEADER + bytes([command & 0xFF, 0x00, 0x00, 0x00]) + len(payload).to_bytes(2, "big") + payload
+    return (
+        HEADER
+        + bytes([command & 0xFF, 0x00, 0x00, 0x00])
+        + len(payload).to_bytes(2, "big")
+        + payload
+    )
 
 
 async def _async_read_exact(
@@ -224,6 +244,8 @@ def _parse_network_chunk(chunk: bytes) -> tuple[str | None, str | None]:
             break
         size = chunk[offset]
         offset += 1
+        if offset + size > len(chunk):
+            raise BanlanxFT001ProtocolError("Truncated network string")
         values.append(chunk[offset : offset + size].decode("utf-8", errors="ignore"))
         offset += size
     return (

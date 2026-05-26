@@ -88,7 +88,9 @@ class BanlanxFT001Coordinator(DataUpdateCoordinator[FT001Status]):
             }
         )
         self.hass.config_entries.async_update_entry(self.entry, data=data)
-        self.entry = self.hass.config_entries.async_get_entry(self.entry.entry_id) or self.entry
+        self.entry = (
+            self.hass.config_entries.async_get_entry(self.entry.entry_id) or self.entry
+        )
         return True
 
     async def _async_find_discovery_by_mac(

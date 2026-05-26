@@ -5,7 +5,8 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "banlanx_ft001"
-DEFAULT_NAME = "BanlanX FT001"
+DEFAULT_NAME = "BanlanX 鱼缸灯"
+LIGHT_ICON = "mdi:fishbowl-outline"
 DEFAULT_PORT = 8587
 DEFAULT_SCAN_INTERVAL = 15
 FT001_MODEL_CODE = 0x96

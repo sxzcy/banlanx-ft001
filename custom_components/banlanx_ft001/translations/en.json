@@ -1,9 +1,9 @@
 {
-  "title": "BanlanX FT001",
+  "title": "BanlanX Aquarium Light",
   "config": {
     "step": {
       "user": {
-        "title": "BanlanX FT001",
+        "title": "BanlanX Aquarium Light",
         "description": "Connect to the FT001 controller over local WiFi.",
         "data": {
           "host": "Host / IP",
@@ -23,7 +23,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "BanlanX FT001 settings",
+        "title": "BanlanX Aquarium Light settings",
         "description": "Update local WiFi connection and polling settings.",
         "data": {
           "host": "Host / IP",
@@ -35,7 +35,19 @@
     },
     "error": {
       "cannot_connect": "Cannot connect to the controller.",
-      "invalid_model": "The controller did not return the verified FT001 two-channel RGB layout."
+      "invalid_model": "The controller did not return the verified FT001 two-channel RGB layout.",
+      "already_configured": "This controller is already configured.",
+      "different_device": "The discovered controller MAC does not match this config entry."
+    }
+  },
+  "entity": {
+    "light": {
+      "channel_1": {
+        "name": "Channel 1"
+      },
+      "channel_2": {
+        "name": "Channel 2"
+      }
     }
   }
 }

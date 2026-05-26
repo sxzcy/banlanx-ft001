@@ -1,4 +1,4 @@
-# BanlanX FT001
+# BanlanX Aquarium Light
 
 Home Assistant custom integration for the BanlanX FT001 fish tank light controller.
 
@@ -37,7 +37,7 @@ custom_components/banlanx_ft001
 Restart Home Assistant, then add the integration from the UI:
 
 ```text
-Settings -> Devices & services -> Add integration -> BanlanX FT001
+Settings -> Devices & services -> Add integration -> BanlanX Aquarium Light
 ```
 
 Use the controller IP address and port `8587`.
