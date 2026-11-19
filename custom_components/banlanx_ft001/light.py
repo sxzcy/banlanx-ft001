@@ -147,11 +147,11 @@ class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity)
                     brightness
                     if brightness is not None
                     else (state.brightness if state is not None else 255),
-                    power_on=state is not None and not state.power,
+                    power_on=state is None or not state.power,
                 )
-        except BanlanxFT001Error as ex:
+        except (BanlanxFT001Error, ValueError) as ex:
             raise HomeAssistantError(
-                f"Failed to update FT001 channel {self._channel}"
+                f"Failed to update FT001 channel {self._channel}: {ex}"
             ) from ex
 
         await self.coordinator.async_request_refresh()
@@ -160,8 +160,8 @@ class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity)
         """Turn off this channel."""
         try:
             await self.coordinator.client.async_set_power(self._channel, False)
-        except BanlanxFT001Error as ex:
+        except (BanlanxFT001Error, ValueError) as ex:
             raise HomeAssistantError(
-                f"Failed to turn off FT001 channel {self._channel}"
+                f"Failed to turn off FT001 channel {self._channel}: {ex}"
             ) from ex
         await self.coordinator.async_request_refresh()

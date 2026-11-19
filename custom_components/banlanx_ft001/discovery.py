@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import select
+from dataclasses import dataclass
+import selectors
 import socket
 import time
-from dataclasses import dataclass
 
 from .const import FT001_MODEL_CODE
 
@@ -60,34 +60,41 @@ def discover_ft001(
     destination = (address or BROADCAST_ADDRESS, SPNET_DISCOVERY_PORT)
     quit_time = time.monotonic() + timeout
     responses: dict[str, FT001Discovery] = {}
+    probe_interval = max(timeout / BROADCAST_FREQUENCY, 0.1)
 
     try:
-        while time.monotonic() < quit_time:
-            try:
-                sock.sendto(SPNET_DISCOVERY_MESSAGE, destination)
-            except OSError:
-                return list(responses.values())
-
+        with selectors.DefaultSelector() as selector:
+            selector.register(sock, selectors.EVENT_READ)
             while time.monotonic() < quit_time:
-                wait_time = min(
-                    max(quit_time - time.monotonic(), 0),
-                    max(timeout / BROADCAST_FREQUENCY, 0.1),
-                )
-                readable, _, _ = select.select([sock], [], [], wait_time)
-                if not readable:
-                    break
-
                 try:
-                    data, from_address = sock.recvfrom(MAX_RESPONSE_SIZE)
+                    sock.sendto(SPNET_DISCOVERY_MESSAGE, destination)
                 except OSError:
+                    remaining = quit_time - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    selector.select(timeout=min(remaining, probe_interval))
                     continue
 
-                discovery = _parse_spnet_response(data, from_address)
-                if discovery is None:
-                    continue
-                responses.setdefault(discovery.host, discovery)
-                if address is not None and discovery.host == address:
-                    return list(responses.values())
+                while time.monotonic() < quit_time:
+                    wait_time = min(
+                        max(quit_time - time.monotonic(), 0),
+                        probe_interval,
+                    )
+                    events = selector.select(timeout=wait_time)
+                    if not events:
+                        break
+
+                    try:
+                        data, from_address = sock.recvfrom(MAX_RESPONSE_SIZE)
+                    except OSError:
+                        continue
+
+                    discovery = _parse_spnet_response(data, from_address)
+                    if discovery is None:
+                        continue
+                    responses.setdefault(discovery.host, discovery)
+                    if address is not None and discovery.host == address:
+                        return list(responses.values())
     finally:
         sock.close()
 

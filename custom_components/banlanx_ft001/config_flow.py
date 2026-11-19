@@ -28,6 +28,9 @@ from .discovery import FT001Discovery, async_discover_ft001_host
 
 MIN_PORT = 1
 MAX_PORT = 65535
+OPTIONS_FLOW_BASE = getattr(
+    config_entries, "OptionsFlowWithReload", config_entries.OptionsFlow
+)
 
 
 def _strip_string(value: str) -> str:
@@ -50,7 +53,7 @@ class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return BanlanxFT001OptionsFlow(config_entry)
+        return BanlanxFT001OptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -121,7 +124,7 @@ class BanlanxFT001ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             raise AbortFlow("already_configured")
 
 
-class BanlanxFT001OptionsFlow(config_entries.OptionsFlowWithConfigEntry):
+class BanlanxFT001OptionsFlow(OPTIONS_FLOW_BASE):
     """Handle options for BanlanX FT001."""
 
     async def async_step_init(
@@ -173,16 +176,29 @@ class BanlanxFT001OptionsFlow(config_entries.OptionsFlowWithConfigEntry):
                             }
                         )
                         new_data.update(_discovery_data(discovery))
-                        self.hass.config_entries.async_update_entry(
+                        data_changed = self.hass.config_entries.async_update_entry(
                             self.config_entry,
                             title=name,
                             data=new_data,
                         )
+                        new_options = {
+                            CONF_SCAN_INTERVAL: scan_interval,
+                        }
+                        options_changed = dict(options) != new_options
+                        if data_changed and not options_changed:
+                            if hasattr(
+                                self.hass.config_entries, "async_schedule_reload"
+                            ):
+                                self.hass.config_entries.async_schedule_reload(
+                                    self.config_entry.entry_id
+                                )
+                            else:
+                                await self.hass.config_entries.async_reload(
+                                    self.config_entry.entry_id
+                                )
                         return self.async_create_entry(
                             title="",
-                            data={
-                                CONF_SCAN_INTERVAL: scan_interval,
-                            },
+                            data=new_options,
                         )
 
         return self.async_show_form(

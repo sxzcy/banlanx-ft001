@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 DEFAULT_PORT = 8587
@@ -89,20 +90,26 @@ class BanlanxFT001Client:
         _validate_channel(channel)
         red, green, blue = (_validate_byte(value) for value in rgb)
         level = _validate_byte(brightness)
+        commands: list[tuple[int, bytes]] = []
+        if power_on:
+            commands.append((CMD_POWER, bytes([channel, 0x01])))
+        commands.append((CMD_STATIC_COLOR, bytes([channel, red, green, blue, level])))
         async with self._lock:
-            if power_on:
-                await self._async_send(CMD_POWER, bytes([channel, 0x01]))
-            await self._async_send(
-                CMD_STATIC_COLOR, bytes([channel, red, green, blue, level])
-            )
+            await self._async_send_commands(commands)
 
     async def _async_send(self, command: int, payload: bytes = b"") -> None:
         """Send a command that does not return a payload."""
+        await self._async_send_commands([(command, payload)])
+
+    async def _async_send_commands(
+        self, commands: Sequence[tuple[int, bytes]]
+    ) -> None:
+        """Send one or more commands over a single TCP connection."""
         reader, writer = await self._async_open_connection()
         try:
-            writer.write(_build_packet(command, payload))
-            await writer.drain()
-            await asyncio.sleep(0.1)
+            for command, payload in commands:
+                await self._async_write_packet(writer, command, payload)
+                await asyncio.sleep(0.1)
         finally:
             writer.close()
             await _async_wait_closed(writer)
@@ -113,8 +120,7 @@ class BanlanxFT001Client:
         """Send a command and read an SPTECH response."""
         reader, writer = await self._async_open_connection()
         try:
-            writer.write(_build_packet(command, payload))
-            await writer.drain()
+            await self._async_write_packet(writer, command, payload)
             header = await _async_read_exact(reader, HEADER_SIZE, self.timeout)
             _validate_response_header(header)
             payload_size = int.from_bytes(header[-2:], "big")
@@ -123,6 +129,23 @@ class BanlanxFT001Client:
         finally:
             writer.close()
             await _async_wait_closed(writer)
+
+    async def _async_write_packet(
+        self,
+        writer: asyncio.StreamWriter,
+        command: int,
+        payload: bytes = b"",
+    ) -> None:
+        """Write and drain one SPTECH packet."""
+        try:
+            writer.write(_build_packet(command, payload))
+            await asyncio.wait_for(writer.drain(), timeout=self.timeout)
+        except TimeoutError as ex:
+            raise BanlanxFT001ConnectionError("Write timed out") from ex
+        except OSError as ex:
+            raise BanlanxFT001ConnectionError(
+                str(ex) or ex.__class__.__name__
+            ) from ex
 
     async def _async_open_connection(
         self,
@@ -133,10 +156,12 @@ class BanlanxFT001Client:
                 asyncio.open_connection(self.host, self.port),
                 timeout=self.timeout,
             )
-        except (OSError, ValueError) as ex:
-            raise BanlanxFT001ConnectionError(str(ex)) from ex
         except TimeoutError as ex:
             raise BanlanxFT001ConnectionError("Connection timed out") from ex
+        except (OSError, ValueError) as ex:
+            raise BanlanxFT001ConnectionError(
+                str(ex) or ex.__class__.__name__
+            ) from ex
 
 
 def _build_packet(command: int, payload: bytes = b"") -> bytes:
@@ -161,6 +186,8 @@ async def _async_read_exact(
         ) from ex
     except TimeoutError as ex:
         raise BanlanxFT001ConnectionError("Read timed out") from ex
+    except OSError as ex:
+        raise BanlanxFT001ConnectionError(str(ex) or ex.__class__.__name__) from ex
 
 
 async def _async_wait_closed(writer: asyncio.StreamWriter) -> None:

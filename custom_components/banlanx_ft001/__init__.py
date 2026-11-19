@@ -41,7 +41,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_update_device_registry(hass, entry)
     return True
@@ -76,21 +75,22 @@ def _async_update_device_registry(hass: HomeAssistant, entry: ConfigEntry) -> No
         return
 
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, entry.unique_id)})
+    identifier = (DOMAIN, entry.unique_id)
+    if hasattr(device_registry, "async_get_device_by_identifier"):
+        device = device_registry.async_get_device_by_identifier(
+            identifier,
+            entry.entry_id,
+        )
+    else:
+        device = device_registry.async_get_device(identifiers={identifier})
     if device is None:
         return
 
     device_registry.async_update_device(
         device.id,
-        merge_connections={(dr.CONNECTION_NETWORK_MAC, mac_address)},
+        new_connections=set(device.connections)
+        | {(dr.CONNECTION_NETWORK_MAC, mac_address)},
     )
-
-
-async def _async_update_listener(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> None:
-    """Reload the entry after options or connection settings change."""
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

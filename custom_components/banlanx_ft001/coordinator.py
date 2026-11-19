@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+import time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
@@ -24,6 +25,7 @@ from .const import (
 from .discovery import FT001Discovery, async_discover_ft001
 
 _LOGGER = logging.getLogger(__name__)
+DISCOVERY_COOLDOWN_SECONDS = 300.0
 
 
 class BanlanxFT001Coordinator(DataUpdateCoordinator[FT001Status]):
@@ -40,6 +42,7 @@ class BanlanxFT001Coordinator(DataUpdateCoordinator[FT001Status]):
         """Initialize the coordinator."""
         self.entry = entry
         self.client = client
+        self._last_discovery_attempt: float | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -50,22 +53,34 @@ class BanlanxFT001Coordinator(DataUpdateCoordinator[FT001Status]):
     async def _async_update_data(self) -> FT001Status:
         """Fetch status from the controller."""
         try:
-            return await self.client.async_get_status()
+            status = await self.client.async_get_status()
         except BanlanxFT001ConnectionError as ex:
             if await self._async_recover_host():
                 try:
-                    return await self.client.async_get_status()
+                    status = await self.client.async_get_status()
                 except BanlanxFT001Error as retry_ex:
                     raise UpdateFailed(str(retry_ex)) from retry_ex
+                self._last_discovery_attempt = None
+                return status
             raise UpdateFailed(str(ex)) from ex
         except BanlanxFT001Error as ex:
             raise UpdateFailed(str(ex)) from ex
+        self._last_discovery_attempt = None
+        return status
 
     async def _async_recover_host(self) -> bool:
         """Find the controller by MAC when its configured IP stops responding."""
         mac_address = self.entry.data.get(CONF_MAC_ADDRESS)
         if not mac_address:
             return False
+
+        now = time.monotonic()
+        if (
+            self._last_discovery_attempt is not None
+            and now - self._last_discovery_attempt < DISCOVERY_COOLDOWN_SECONDS
+        ):
+            return False
+        self._last_discovery_attempt = now
 
         discovery = await self._async_find_discovery_by_mac(mac_address)
         if discovery is None or discovery.host == self.client.host:
