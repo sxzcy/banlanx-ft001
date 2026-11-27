@@ -15,11 +15,11 @@ def test_manifest_release_metadata():
     manifest = json.loads((COMPONENT_DIR / "manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["domain"] == "banlanx_ft001"
-    assert manifest["categories"] == ["light"]
+    assert manifest["categories"] == ["lighting"]
     assert manifest["config_flow"] is True
     assert manifest["iot_class"] == "local_polling"
     assert manifest["integration_type"] == "device"
-    assert manifest["version"] == "0.5.0"
+    assert manifest["version"] == "0.5.1"
     assert manifest["requirements"] == []
     assert manifest["dependencies"] == ["network"]
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Fix `manifest.json` category key to the valid Home Assistant category `lighting`.
+
 ## 0.5.0
 
 - Add standalone brightness control (`0x51`) without leaving dynamic effects.
