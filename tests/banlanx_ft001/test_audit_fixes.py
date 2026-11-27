@@ -420,7 +420,7 @@ class BanlanxAuditFixesTest(unittest.TestCase):
 
     def test_manifest_version_bumped(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], "0.5.0")
+        self.assertEqual(manifest["version"], "0.5.1")
 
     # ---- BLX-01 ----
     def test_blx01_timeout_caught_before_oserror_with_non_empty_message(self) -> None:
