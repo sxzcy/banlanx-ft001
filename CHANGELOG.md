@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- Localize light effect names (`纯色常亮`, `七彩渐变`, `蓝色呼吸`, etc.) in `effect_list` while keeping backward-compatible English aliases for automations/service calls.
+
 ## 0.5.1
 
 - Fix `manifest.json` category key to the valid Home Assistant category `lighting`.

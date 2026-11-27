@@ -22,20 +22,20 @@ BRIGHTNESS_CHANNEL_COLOR = 0x00
 MODE_STATIC_COLOR = 0x01
 MODE_DYNAMIC_COLOR = 0x03
 
-EFFECT_SOLID = "Solid"
+EFFECT_SOLID = "纯色常亮"
 FT001_DYNAMIC_EFFECTS: dict[int, str] = {
-    0x01: "Jump Seven Color",
-    0x02: "Breath Seven Color",
-    0x03: "Strobe Seven Color",
-    0x04: "Heartbeat Seven Color",
-    0x05: "Gradient Seven Color",
-    0x06: "Breath Red",
-    0x07: "Breath Green",
-    0x08: "Breath Blue",
-    0x09: "Breath Yellow",
-    0x0A: "Breath Cyan",
-    0x0B: "Breath Purple",
-    0x0C: "Breath White",
+    0x01: "七彩跳变",
+    0x02: "七彩呼吸",
+    0x03: "七彩频闪",
+    0x04: "七彩心跳",
+    0x05: "七彩渐变",
+    0x06: "红色呼吸",
+    0x07: "绿色呼吸",
+    0x08: "蓝色呼吸",
+    0x09: "黄色呼吸",
+    0x0A: "青色呼吸",
+    0x0B: "紫色呼吸",
+    0x0C: "白色呼吸",
 }
 FT001_EFFECT_TO_COMMAND: dict[str, tuple[int, int]] = {
     EFFECT_SOLID: (MODE_STATIC_COLOR, 0x01),
@@ -43,6 +43,21 @@ FT001_EFFECT_TO_COMMAND: dict[str, tuple[int, int]] = {
         name: (MODE_DYNAMIC_COLOR, effect_code)
         for effect_code, name in FT001_DYNAMIC_EFFECTS.items()
     },
+}
+FT001_EFFECT_ALIASES: dict[str, str] = {
+    "Solid": EFFECT_SOLID,
+    "Jump Seven Color": FT001_DYNAMIC_EFFECTS[0x01],
+    "Breath Seven Color": FT001_DYNAMIC_EFFECTS[0x02],
+    "Strobe Seven Color": FT001_DYNAMIC_EFFECTS[0x03],
+    "Heartbeat Seven Color": FT001_DYNAMIC_EFFECTS[0x04],
+    "Gradient Seven Color": FT001_DYNAMIC_EFFECTS[0x05],
+    "Breath Red": FT001_DYNAMIC_EFFECTS[0x06],
+    "Breath Green": FT001_DYNAMIC_EFFECTS[0x07],
+    "Breath Blue": FT001_DYNAMIC_EFFECTS[0x08],
+    "Breath Yellow": FT001_DYNAMIC_EFFECTS[0x09],
+    "Breath Cyan": FT001_DYNAMIC_EFFECTS[0x0A],
+    "Breath Purple": FT001_DYNAMIC_EFFECTS[0x0B],
+    "Breath White": FT001_DYNAMIC_EFFECTS[0x0C],
 }
 FT001_EFFECT_LIST: list[str] = list(FT001_EFFECT_TO_COMMAND)
 
@@ -183,9 +198,10 @@ class BanlanxFT001Client:
     ) -> FT001Status | None:
         """Set static or dynamic effect for one output channel."""
         _validate_channel(channel)
-        if effect not in FT001_EFFECT_TO_COMMAND:
+        canonical = FT001_EFFECT_ALIASES.get(effect, effect)
+        if canonical not in FT001_EFFECT_TO_COMMAND:
             raise ValueError(f"Unsupported FT001 effect: {effect}")
-        mode, effect_code = FT001_EFFECT_TO_COMMAND[effect]
+        mode, effect_code = FT001_EFFECT_TO_COMMAND[canonical]
         commands: list[tuple[int, bytes]] = []
         if power_on:
             commands.append((CMD_POWER, bytes([channel, 0x01])))

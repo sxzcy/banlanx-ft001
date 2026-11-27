@@ -171,7 +171,7 @@ class BanlanxFT001Light(CoordinatorEntity[BanlanxFT001Coordinator], LightEntity)
 
         try:
             if effect is not None:
-                if effect == EFFECT_SOLID and rgb is not None:
+                if effect in (EFFECT_SOLID, "Solid") and rgb is not None:
                     level = (
                         brightness
                         if brightness is not None

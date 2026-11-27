@@ -420,7 +420,7 @@ class BanlanxAuditFixesTest(unittest.TestCase):
 
     def test_manifest_version_bumped(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], "0.5.1")
+        self.assertEqual(manifest["version"], "0.5.2")
 
     # ---- BLX-01 ----
     def test_blx01_timeout_caught_before_oserror_with_non_empty_message(self) -> None:
@@ -799,7 +799,7 @@ class BanlanxAuditFixesTest(unittest.TestCase):
                 ],
             )
             self.assertIsNotNone(st)
-            self.assertEqual(st.channels[1].effect_name, "Gradient Seven Color")
+            self.assertEqual(st.channels[1].effect_name, "七彩渐变")
             self.assertEqual(st.channels[1].speed, 8)
 
             # Light entity routing: brightness-only uses CMD_BRIGHTNESS, effect uses CMD_EFFECT
@@ -814,10 +814,10 @@ class BanlanxAuditFixesTest(unittest.TestCase):
                 ch1_power=True, ch1_mode=3, ch1_effect=5, ch1_speed=4
             )
             light = self.light_mod.BanlanxFT001Light(coord, entry, 1)
-            self.assertEqual(light.effect, "Gradient Seven Color")
+            self.assertEqual(light.effect, "七彩渐变")
             self.assertEqual(light.device_info["sw_version"], "V1.0.08")
-            self.assertIn("Solid", light.effect_list)
-            self.assertIn("Gradient Seven Color", light.effect_list)
+            self.assertIn("纯色常亮", light.effect_list)
+            self.assertIn("七彩渐变", light.effect_list)
 
             with (
                 patch.object(
@@ -838,9 +838,9 @@ class BanlanxAuditFixesTest(unittest.TestCase):
                 )
                 set_color.assert_not_awaited()
 
-                await light.async_turn_on(effect="Breath Blue")
+                await light.async_turn_on(effect="蓝色呼吸")
                 set_fx.assert_awaited_once_with(
-                    1, "Breath Blue", power_on=False, brightness=None, fetch_status=True
+                    1, "蓝色呼吸", power_on=False, brightness=None, fetch_status=True
                 )
 
                 await light.async_turn_on(rgb_color=(1, 2, 3))

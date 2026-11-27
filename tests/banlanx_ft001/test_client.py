@@ -87,7 +87,7 @@ def test_parse_status_payload(component_modules):
     assert channel_1.power is True
     assert channel_1.mode == 1
     assert channel_1.effect == 1
-    assert channel_1.effect_name == "Solid"
+    assert channel_1.effect_name == "纯色常亮"
     assert channel_1.brightness == 255
     assert channel_1.rgb == (127, 172, 255)
     assert channel_1.speed == 3
@@ -98,7 +98,7 @@ def test_parse_status_payload(component_modules):
     assert channel_2.power is True
     assert channel_2.mode == 3
     assert channel_2.effect == 5
-    assert channel_2.effect_name == "Gradient Seven Color"
+    assert channel_2.effect_name == "七彩渐变"
     assert channel_2.brightness == 180
     assert channel_2.rgb == (255, 158, 243)
     assert channel_2.speed == 7

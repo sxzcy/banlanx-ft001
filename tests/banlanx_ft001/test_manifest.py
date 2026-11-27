@@ -19,7 +19,7 @@ def test_manifest_release_metadata():
     assert manifest["config_flow"] is True
     assert manifest["iot_class"] == "local_polling"
     assert manifest["integration_type"] == "device"
-    assert manifest["version"] == "0.5.1"
+    assert manifest["version"] == "0.5.2"
     assert manifest["requirements"] == []
     assert manifest["dependencies"] == ["network"]
 
