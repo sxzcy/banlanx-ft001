@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import dataclass
 import selectors
 import socket
 import time
+from typing import Any
 
 from .const import FT001_MODEL_CODE
 
@@ -34,11 +36,36 @@ class FT001Discovery:
         return self.model_code == FT001_MODEL_CODE
 
 
+async def async_get_broadcast_addresses(hass: Any) -> list[str]:
+    """Return IPv4 broadcast addresses configured in Home Assistant."""
+    if hass is None:
+        return [BROADCAST_ADDRESS]
+
+    try:
+        from homeassistant.components import network
+    except ImportError:
+        return [BROADCAST_ADDRESS]
+
+    get_broadcasts = getattr(network, "async_get_ipv4_broadcast_addresses", None)
+    if get_broadcasts is None:
+        return [BROADCAST_ADDRESS]
+
+    try:
+        raw_addresses = await get_broadcasts(hass)
+    except Exception:
+        return [BROADCAST_ADDRESS]
+
+    addresses = sorted({str(addr) for addr in raw_addresses if str(addr)})
+    return addresses or [BROADCAST_ADDRESS]
+
+
 async def async_discover_ft001(
-    timeout: float = 3.0, address: str | None = None
+    timeout: float = 3.0,
+    address: str | None = None,
+    addresses: Sequence[str] | None = None,
 ) -> list[FT001Discovery]:
     """Discover FT001-compatible controllers without blocking the event loop."""
-    return await asyncio.to_thread(discover_ft001, timeout, address)
+    return await asyncio.to_thread(discover_ft001, timeout, address, addresses)
 
 
 async def async_discover_ft001_host(
@@ -53,11 +80,14 @@ async def async_discover_ft001_host(
 
 
 def discover_ft001(
-    timeout: float = 3.0, address: str | None = None
+    timeout: float = 3.0,
+    address: str | None = None,
+    addresses: Sequence[str] | None = None,
 ) -> list[FT001Discovery]:
     """Discover FT001-compatible controllers with the SPNET UDP probe."""
     sock = _create_udp_socket()
-    destination = (address or BROADCAST_ADDRESS, SPNET_DISCOVERY_PORT)
+    targets = _resolve_targets(address, addresses)
+    unicast_target = address if addresses is None and address is not None else None
     quit_time = time.monotonic() + timeout
     responses: dict[str, FT001Discovery] = {}
     probe_interval = max(timeout / BROADCAST_FREQUENCY, 0.1)
@@ -66,9 +96,18 @@ def discover_ft001(
         with selectors.DefaultSelector() as selector:
             selector.register(sock, selectors.EVENT_READ)
             while time.monotonic() < quit_time:
-                try:
-                    sock.sendto(SPNET_DISCOVERY_MESSAGE, destination)
-                except OSError:
+                sent_any = False
+                for target in targets:
+                    try:
+                        sock.sendto(
+                            SPNET_DISCOVERY_MESSAGE,
+                            (target, SPNET_DISCOVERY_PORT),
+                        )
+                        sent_any = True
+                    except OSError:
+                        continue
+
+                if not sent_any:
                     remaining = quit_time - time.monotonic()
                     if remaining <= 0:
                         break
@@ -93,12 +132,25 @@ def discover_ft001(
                     if discovery is None:
                         continue
                     responses.setdefault(discovery.host, discovery)
-                    if address is not None and discovery.host == address:
+                    if unicast_target is not None and discovery.host == unicast_target:
                         return list(responses.values())
     finally:
         sock.close()
 
     return list(responses.values())
+
+
+def _resolve_targets(
+    address: str | None, addresses: Sequence[str] | None
+) -> list[str]:
+    """Build a deduplicated list of UDP probe targets."""
+    if addresses is not None:
+        cleaned = list(dict.fromkeys(addr for addr in addresses if addr))
+        if cleaned:
+            return cleaned
+    if address:
+        return [address]
+    return [BROADCAST_ADDRESS]
 
 
 def _create_udp_socket() -> socket.socket:

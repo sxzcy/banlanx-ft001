@@ -12,7 +12,43 @@ HEADER_SIZE = 13
 
 CMD_STATUS_QUERY = 0x02
 CMD_POWER = 0x50
+CMD_BRIGHTNESS = 0x51
 CMD_STATIC_COLOR = 0x52
+CMD_EFFECT = 0x53
+CMD_SPEED = 0x54
+
+BRIGHTNESS_CHANNEL_COLOR = 0x00
+
+MODE_STATIC_COLOR = 0x01
+MODE_DYNAMIC_COLOR = 0x03
+
+EFFECT_SOLID = "Solid"
+FT001_DYNAMIC_EFFECTS: dict[int, str] = {
+    0x01: "Jump Seven Color",
+    0x02: "Breath Seven Color",
+    0x03: "Strobe Seven Color",
+    0x04: "Heartbeat Seven Color",
+    0x05: "Gradient Seven Color",
+    0x06: "Breath Red",
+    0x07: "Breath Green",
+    0x08: "Breath Blue",
+    0x09: "Breath Yellow",
+    0x0A: "Breath Cyan",
+    0x0B: "Breath Purple",
+    0x0C: "Breath White",
+}
+FT001_EFFECT_TO_COMMAND: dict[str, tuple[int, int]] = {
+    EFFECT_SOLID: (MODE_STATIC_COLOR, 0x01),
+    **{
+        name: (MODE_DYNAMIC_COLOR, effect_code)
+        for effect_code, name in FT001_DYNAMIC_EFFECTS.items()
+    },
+}
+FT001_EFFECT_LIST: list[str] = list(FT001_EFFECT_TO_COMMAND)
+
+MIN_SPEED = 1
+MAX_SPEED = 10
+MAX_LENGTH_FIELDS = 3
 
 
 class BanlanxFT001Error(Exception):
@@ -40,6 +76,17 @@ class FT001ChannelState:
     rgb: tuple[int, int, int]
     speed: int
     length: int
+    effect_loop: bool = False
+    chip_order: int = 0
+
+    @property
+    def effect_name(self) -> str | None:
+        """Return the human-readable Home Assistant effect name."""
+        if self.mode == MODE_STATIC_COLOR:
+            return EFFECT_SOLID
+        if self.mode == MODE_DYNAMIC_COLOR:
+            return FT001_DYNAMIC_EFFECTS.get(self.effect)
+        return None
 
 
 @dataclass(frozen=True)
@@ -72,11 +119,38 @@ class BanlanxFT001Client:
             raise BanlanxFT001ProtocolError("Unexpected status response command")
         return _parse_status_payload(payload)
 
-    async def async_set_power(self, channel: int, state: bool) -> None:
+    async def async_set_power(
+        self,
+        channel: int,
+        state: bool,
+        *,
+        fetch_status: bool = False,
+    ) -> FT001Status | None:
         """Set one output channel on or off."""
         _validate_channel(channel)
+        commands = [(CMD_POWER, bytes([channel, 0x01 if state else 0x00]))]
         async with self._lock:
-            await self._async_send(CMD_POWER, bytes([channel, 0x01 if state else 0x00]))
+            return await self._async_send_commands(commands, fetch_status=fetch_status)
+
+    async def async_set_brightness(
+        self,
+        channel: int,
+        brightness: int,
+        *,
+        power_on: bool = False,
+        fetch_status: bool = False,
+    ) -> FT001Status | None:
+        """Set brightness for one channel without leaving its current mode."""
+        _validate_channel(channel)
+        level = _validate_byte(brightness)
+        commands: list[tuple[int, bytes]] = []
+        if power_on:
+            commands.append((CMD_POWER, bytes([channel, 0x01])))
+        commands.append(
+            (CMD_BRIGHTNESS, bytes([channel, BRIGHTNESS_CHANNEL_COLOR, level]))
+        )
+        async with self._lock:
+            return await self._async_send_commands(commands, fetch_status=fetch_status)
 
     async def async_set_static_color(
         self,
@@ -85,7 +159,8 @@ class BanlanxFT001Client:
         brightness: int,
         *,
         power_on: bool = False,
-    ) -> None:
+        fetch_status: bool = False,
+    ) -> FT001Status | None:
         """Set one output channel to a static RGB color and brightness."""
         _validate_channel(channel)
         red, green, blue = (_validate_byte(value) for value in rgb)
@@ -95,21 +170,72 @@ class BanlanxFT001Client:
             commands.append((CMD_POWER, bytes([channel, 0x01])))
         commands.append((CMD_STATIC_COLOR, bytes([channel, red, green, blue, level])))
         async with self._lock:
-            await self._async_send_commands(commands)
+            return await self._async_send_commands(commands, fetch_status=fetch_status)
+
+    async def async_set_effect(
+        self,
+        channel: int,
+        effect: str,
+        *,
+        power_on: bool = False,
+        brightness: int | None = None,
+        fetch_status: bool = False,
+    ) -> FT001Status | None:
+        """Set static or dynamic effect for one output channel."""
+        _validate_channel(channel)
+        if effect not in FT001_EFFECT_TO_COMMAND:
+            raise ValueError(f"Unsupported FT001 effect: {effect}")
+        mode, effect_code = FT001_EFFECT_TO_COMMAND[effect]
+        commands: list[tuple[int, bytes]] = []
+        if power_on:
+            commands.append((CMD_POWER, bytes([channel, 0x01])))
+        commands.append((CMD_EFFECT, bytes([channel, mode, effect_code])))
+        if brightness is not None:
+            level = _validate_byte(brightness)
+            commands.append(
+                (CMD_BRIGHTNESS, bytes([channel, BRIGHTNESS_CHANNEL_COLOR, level]))
+            )
+        async with self._lock:
+            return await self._async_send_commands(commands, fetch_status=fetch_status)
+
+    async def async_set_speed(
+        self,
+        channel: int,
+        speed: int,
+        *,
+        fetch_status: bool = False,
+    ) -> FT001Status | None:
+        """Set dynamic effect speed (1..10) for one output channel."""
+        _validate_channel(channel)
+        validated_speed = _validate_speed(speed)
+        commands = [(CMD_SPEED, bytes([channel, validated_speed]))]
+        async with self._lock:
+            return await self._async_send_commands(commands, fetch_status=fetch_status)
 
     async def _async_send(self, command: int, payload: bytes = b"") -> None:
         """Send a command that does not return a payload."""
         await self._async_send_commands([(command, payload)])
 
     async def _async_send_commands(
-        self, commands: Sequence[tuple[int, bytes]]
-    ) -> None:
+        self,
+        commands: Sequence[tuple[int, bytes]],
+        *,
+        fetch_status: bool = False,
+    ) -> FT001Status | None:
         """Send one or more commands over a single TCP connection."""
         reader, writer = await self._async_open_connection()
         try:
             for command, payload in commands:
                 await self._async_write_packet(writer, command, payload)
                 await asyncio.sleep(0.1)
+            if not fetch_status:
+                return None
+            header, response = await self._async_query_on_stream(
+                reader, writer, CMD_STATUS_QUERY
+            )
+            if header[7] != CMD_STATUS_QUERY:
+                raise BanlanxFT001ProtocolError("Unexpected status response command")
+            return _parse_status_payload(response)
         finally:
             writer.close()
             await _async_wait_closed(writer)
@@ -120,15 +246,25 @@ class BanlanxFT001Client:
         """Send a command and read an SPTECH response."""
         reader, writer = await self._async_open_connection()
         try:
-            await self._async_write_packet(writer, command, payload)
-            header = await _async_read_exact(reader, HEADER_SIZE, self.timeout)
-            _validate_response_header(header)
-            payload_size = int.from_bytes(header[-2:], "big")
-            response = await _async_read_exact(reader, payload_size, self.timeout)
-            return header, response
+            return await self._async_query_on_stream(reader, writer, command, payload)
         finally:
             writer.close()
             await _async_wait_closed(writer)
+
+    async def _async_query_on_stream(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        command: int,
+        payload: bytes = b"",
+    ) -> tuple[bytes, bytes]:
+        """Send one request and read its SPTECH response on an open stream."""
+        await self._async_write_packet(writer, command, payload)
+        header = await _async_read_exact(reader, HEADER_SIZE, self.timeout)
+        _validate_response_header(header)
+        payload_size = int.from_bytes(header[-2:], "big")
+        response = await _async_read_exact(reader, payload_size, self.timeout)
+        return header, response
 
     async def _async_write_packet(
         self,
@@ -212,6 +348,8 @@ def _parse_status_payload(payload: bytes) -> FT001Status:
         raise BanlanxFT001ProtocolError("Empty status payload")
 
     length_fields = payload[0]
+    if length_fields > MAX_LENGTH_FIELDS:
+        raise BanlanxFT001ProtocolError("Unsupported status chunk length field size")
     offset = 1
     firmware: str | None = None
     ssid: str | None = None
@@ -298,6 +436,8 @@ def _parse_channel_chunk(chunk: bytes) -> FT001ChannelState:
         rgb=(data[9], data[10], data[11]),
         speed=data[14],
         length=data[15],
+        effect_loop=bool(data[2]),
+        chip_order=data[3],
     )
 
 
@@ -312,4 +452,12 @@ def _validate_byte(value: int) -> int:
     value = int(value)
     if value < 0 or value > 255:
         raise ValueError("Value must be between 0 and 255")
+    return value
+
+
+def _validate_speed(value: int) -> int:
+    """Validate an FT001 dynamic effect speed value."""
+    value = int(value)
+    if value < MIN_SPEED or value > MAX_SPEED:
+        raise ValueError(f"Speed must be between {MIN_SPEED} and {MAX_SPEED}")
     return value

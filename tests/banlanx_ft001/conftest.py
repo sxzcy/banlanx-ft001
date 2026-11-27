@@ -21,6 +21,7 @@ def component_modules() -> dict[str, types.ModuleType]:
 
     class Platform:
         LIGHT = "light"
+        NUMBER = "number"
 
     ha_const.Platform = Platform
     sys.modules.setdefault("homeassistant", ha)

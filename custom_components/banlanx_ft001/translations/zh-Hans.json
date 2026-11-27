@@ -10,6 +10,23 @@
           "port": "端口",
           "name": "名称"
         }
+      },
+      "discover": {
+        "title": "发现 BanlanX 鱼缸灯",
+        "description": "选择局域网中发现的 FT001 控制器，或选择手动输入主机 / IP。",
+        "data": {
+          "device": "控制器",
+          "name": "名称"
+        }
+      },
+      "manual": {
+        "title": "BanlanX 鱼缸灯（手动配置）",
+        "description": "手动输入 FT001 控制器的主机地址和端口。",
+        "data": {
+          "host": "主机 / IP",
+          "port": "端口",
+          "name": "名称"
+        }
       }
     },
     "error": {
@@ -47,6 +64,14 @@
       },
       "channel_2": {
         "name": "通道 2"
+      }
+    },
+    "number": {
+      "channel_1_speed": {
+        "name": "通道 1 效果速度"
+      },
+      "channel_2_speed": {
+        "name": "通道 2 效果速度"
       }
     }
   }

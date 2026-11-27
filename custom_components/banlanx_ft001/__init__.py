@@ -69,13 +69,16 @@ async def _async_enrich_entry_discovery(
 
 
 def _async_update_device_registry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Merge the discovered WiFi MAC into an existing device registry entry."""
+    """Sync MAC connection, display name, and firmware to the device registry."""
+    host = entry.data.get(CONF_HOST)
+    port = entry.data.get(CONF_PORT, DEFAULT_PORT)
     mac_address = entry.data.get(CONF_MAC_ADDRESS)
-    if not mac_address or not entry.unique_id:
+    device_id = entry.unique_id or mac_address or (f"{host}:{port}" if host else None)
+    if not device_id:
         return
 
     device_registry = dr.async_get(hass)
-    identifier = (DOMAIN, entry.unique_id)
+    identifier = (DOMAIN, device_id)
     if hasattr(device_registry, "async_get_device_by_identifier"):
         device = device_registry.async_get_device_by_identifier(
             identifier,
@@ -86,11 +89,27 @@ def _async_update_device_registry(hass: HomeAssistant, entry: ConfigEntry) -> No
     if device is None:
         return
 
-    device_registry.async_update_device(
-        device.id,
-        new_connections=set(device.connections)
-        | {(dr.CONNECTION_NETWORK_MAC, mac_address)},
+    update_kwargs: dict[str, object] = {}
+    if mac_address:
+        update_kwargs["new_connections"] = set(device.connections) | {
+            (dr.CONNECTION_NETWORK_MAC, mac_address)
+        }
+
+    configured_name = entry.data.get(CONF_NAME)
+    if configured_name and getattr(device, "name", None) != configured_name:
+        update_kwargs["name"] = configured_name
+
+    coordinator: BanlanxFT001Coordinator | None = getattr(entry, "runtime_data", None)
+    firmware = (
+        coordinator.data.firmware
+        if coordinator is not None and coordinator.data is not None
+        else None
     )
+    if firmware and getattr(device, "sw_version", None) != firmware:
+        update_kwargs["sw_version"] = firmware
+
+    if update_kwargs:
+        device_registry.async_update_device(device.id, **update_kwargs)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

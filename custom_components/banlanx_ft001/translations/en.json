@@ -10,6 +10,23 @@
           "port": "Port",
           "name": "Name"
         }
+      },
+      "discover": {
+        "title": "Discovered BanlanX Aquarium Light",
+        "description": "Select a discovered FT001 controller on your local network, or choose Manual IP / Host.",
+        "data": {
+          "device": "Controller",
+          "name": "Name"
+        }
+      },
+      "manual": {
+        "title": "BanlanX Aquarium Light (Manual)",
+        "description": "Enter the FT001 controller host and port manually.",
+        "data": {
+          "host": "Host / IP",
+          "port": "Port",
+          "name": "Name"
+        }
       }
     },
     "error": {
@@ -47,6 +64,14 @@
       },
       "channel_2": {
         "name": "Channel 2"
+      }
+    },
+    "number": {
+      "channel_1_speed": {
+        "name": "Channel 1 effect speed"
+      },
+      "channel_2_speed": {
+        "name": "Channel 2 effect speed"
       }
     }
   }

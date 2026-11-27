@@ -1,51 +1,77 @@
 {
+  "title": "BanlanX Aquarium Light",
   "config": {
     "step": {
       "user": {
-        "title": "BanlanX 鱼缸灯",
-        "description": "通过本地 WiFi 连接 FT001 控制器。",
+        "title": "BanlanX Aquarium Light",
+        "description": "Connect to the FT001 controller over local WiFi.",
         "data": {
-          "host": "主机 / IP",
-          "port": "端口",
-          "name": "名称"
+          "host": "Host / IP",
+          "port": "Port",
+          "name": "Name"
+        }
+      },
+      "discover": {
+        "title": "Discovered BanlanX Aquarium Light",
+        "description": "Select a discovered FT001 controller on your local network, or choose Manual IP / Host.",
+        "data": {
+          "device": "Controller",
+          "name": "Name"
+        }
+      },
+      "manual": {
+        "title": "BanlanX Aquarium Light (Manual)",
+        "description": "Enter the FT001 controller host and port manually.",
+        "data": {
+          "host": "Host / IP",
+          "port": "Port",
+          "name": "Name"
         }
       }
     },
     "error": {
-      "cannot_connect": "无法连接到控制器。",
-      "invalid_model": "控制器没有返回已验证的 FT001 双通道 RGB 布局。"
+      "cannot_connect": "Cannot connect to the controller.",
+      "invalid_model": "The controller did not return the verified FT001 two-channel RGB layout."
     },
     "abort": {
-      "already_configured": "这个控制器已经配置过。"
+      "already_configured": "This controller is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "BanlanX 鱼缸灯设置",
-        "description": "更新本地 WiFi 连接和轮询设置。",
+        "title": "BanlanX Aquarium Light settings",
+        "description": "Update local WiFi connection and polling settings.",
         "data": {
-          "host": "主机 / IP",
-          "port": "端口",
-          "name": "名称",
-          "scan_interval": "轮询间隔（秒）"
+          "host": "Host / IP",
+          "port": "Port",
+          "name": "Name",
+          "scan_interval": "Polling interval (seconds)"
         }
       }
     },
     "error": {
-      "cannot_connect": "无法连接到控制器。",
-      "invalid_model": "控制器没有返回已验证的 FT001 双通道 RGB 布局。",
-      "already_configured": "这个控制器已经配置过。",
-      "different_device": "发现的控制器 MAC 与当前配置项不一致。"
+      "cannot_connect": "Cannot connect to the controller.",
+      "invalid_model": "The controller did not return the verified FT001 two-channel RGB layout.",
+      "already_configured": "This controller is already configured.",
+      "different_device": "The discovered controller MAC does not match this config entry."
     }
   },
   "entity": {
     "light": {
       "channel_1": {
-        "name": "通道 1"
+        "name": "Channel 1"
       },
       "channel_2": {
-        "name": "通道 2"
+        "name": "Channel 2"
+      }
+    },
+    "number": {
+      "channel_1_speed": {
+        "name": "Channel 1 effect speed"
+      },
+      "channel_2_speed": {
+        "name": "Channel 2 effect speed"
       }
     }
   }

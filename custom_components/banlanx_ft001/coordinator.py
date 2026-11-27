@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 import logging
 import time
@@ -22,7 +23,11 @@ from .const import (
     CONF_MODEL_CODE,
     DEFAULT_SCAN_INTERVAL,
 )
-from .discovery import FT001Discovery, async_discover_ft001
+from .discovery import (
+    FT001Discovery,
+    async_discover_ft001,
+    async_get_broadcast_addresses,
+)
 
 _LOGGER = logging.getLogger(__name__)
 DISCOVERY_COOLDOWN_SECONDS = 300.0
@@ -49,6 +54,23 @@ class BanlanxFT001Coordinator(DataUpdateCoordinator[FT001Status]):
             name=name,
             update_interval=timedelta(seconds=scan_interval),
         )
+
+    async def async_execute_command(
+        self, action: Callable[[], Awaitable[FT001Status | None]]
+    ) -> None:
+        """Run a control command with one-shot IP recovery and immediate state sync."""
+        try:
+            status = await action()
+        except BanlanxFT001ConnectionError:
+            if not await self._async_recover_host():
+                raise
+            status = await action()
+
+        self._last_discovery_attempt = None
+        if status is not None and hasattr(self, "async_set_updated_data"):
+            self.async_set_updated_data(status)
+        else:
+            await self.async_request_refresh()
 
     async def _async_update_data(self) -> FT001Status:
         """Fetch status from the controller."""
@@ -113,7 +135,8 @@ class BanlanxFT001Coordinator(DataUpdateCoordinator[FT001Status]):
     ) -> FT001Discovery | None:
         """Return a discovered FT001 controller by MAC address."""
         target = mac_address.upper()
-        for discovery in await async_discover_ft001(timeout=3.0):
+        addresses = await async_get_broadcast_addresses(self.hass)
+        for discovery in await async_discover_ft001(timeout=3.0, addresses=addresses):
             if discovery.is_ft001 and discovery.mac_address.upper() == target:
                 return discovery
         return None
